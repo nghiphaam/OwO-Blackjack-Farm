@@ -157,7 +157,7 @@ def parse_game_state(text):
     lines = text.splitlines()
     player_cards = []
     for i, line in enumerate(lines):
-        if re.search(r"^(?!.*[Dd]ealer)\S+\.\S+\s*\[", line):
+        if re.search(r"\[\d+\*?\]", line) and not re.search(r"[Dd]ealer", line):
             for j in range(i + 1, min(i + 3, len(lines))):
                 card_matches = re.findall(card_pattern, lines[j])
                 for cm in card_matches:
