@@ -526,7 +526,7 @@ async def stoponloss(ctx, amount_str=None):
 @ghosty.command(aliases=["h"])
 async def help(ctx):
     ghosty_help = """
-    # 🤑 GhoSty OwO BlackJack Farm V1 🤑 
+    # 🤑 GhoSty OwO BlackJack Farm V2 🤑 
 Prefix: `.`
 
 **__Main__**
