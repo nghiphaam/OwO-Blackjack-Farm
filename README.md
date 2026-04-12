@@ -1,4 +1,4 @@
-# GhoSty OwO BlackJack Farm V1
+# GhoSty OwO BlackJack Farm V2
 
 ## ⚠️ Disclaimer  
 
