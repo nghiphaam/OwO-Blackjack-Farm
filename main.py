@@ -2,14 +2,15 @@
 This code is only made for educational and practice purposes. 
 Author and Async Development are not responsible for misuse.
 
-GhoSty OwO BlackJack V1 Stable Build
-Stable Alpha Build Version: 060426.1.0.0
+GhoSty OwO BlackJack V2 Stable Build
+Stable Alpha Build Version: 120426.2.0.0
 
 GitHub: https://github.com/WannaBeGhoSt
 Discord: https://discord.gg/SyMJymrV8x
 """
 
 import discord
+from discord import emoji
 from discord.ext import commands
 from colorama import Fore, Style, init as colorama_init
 import asyncio, json, re, os, time, unicodedata, sys
@@ -34,16 +35,36 @@ ghosty.remove_command("help")
 @ghosty.event
 async def on_ready():
     print(
-        f"{Fore.LIGHTRED_EX} > GhoSty OwO BlackJack Farm v1 Connected To:{Style.RESET_ALL}",
+        f"{Fore.LIGHTRED_EX} > GhoSty OwO BlackJack Farm v2 Connected To:{Style.RESET_ALL}",
         f"{Fore.LIGHTGREEN_EX}{ghosty.user}{Style.BRIGHT}{Style.RESET_ALL}",
     )
-    print(f"{Fore.LIGHTRED_EX} > Released - 6 April 2026 [Join Async Development For Further Updates]{Style.RESET_ALL}")
+    print(f"{Fore.LIGHTRED_EX} > Released - 12 April 2026 [Join Async Development For Further Updates]{Style.RESET_ALL}")
     print(f"{Fore.CYAN} > https://discord.gg/SyMJymrV8x {Style.RESET_ALL}")
 
 farming_active = False
 farm_task = None
 DATA_FILE = "data.json"
 OWO_BOT_ID = 408785106942164992
+
+def parse_time_to_seconds(time_str):
+    seconds = 0
+    time_str = time_str.lower()
+    hours = re.search(r'(\d+)h', time_str)
+    mins = re.search(r'(\d+)m', time_str)
+    secs = re.search(r'(\d+)s', time_str)
+    if hours: seconds += int(hours.group(1)) * 3600
+    if mins: seconds += int(mins.group(1)) * 60
+    if secs: seconds += int(secs.group(1))
+    return seconds
+
+def parse_amount(amt_str):
+    amt_str = amt_str.lower().replace(",", "")
+    if amt_str.endswith('k'):
+        return int(float(amt_str[:-1]) * 1000)
+    elif amt_str.endswith('m'):
+        return int(float(amt_str[:-1]) * 1000000)
+    else:
+        return int(amt_str)
 
 def load_config():
     if os.path.exists("config.json"):
@@ -63,7 +84,10 @@ def load_data():
         "losses": 0,
         "ties": 0,
         "commands_used": 0,
-        "seq_index": 0
+        "seq_index": 0,
+        "timer_end": None,
+        "stop_on_loss_limit": None,
+        "internal_profit": 0
     }
 
 def save_data(d):
@@ -71,10 +95,13 @@ def save_data(d):
         json.dump(d, f, indent=2)
 
 data = load_data()
+data["timer_end"] = None 
+save_data(data)
 config = load_config()
 
 BET_SEQUENCES = {
-    "Low": [2000, 3011, 7000, 15777, 29000, 58000, 115123],
+    # "Low": [2000, 3011, 7000, 15777, 29000, 58000, 115123], old low sequence not in use
+    "Low": [488, 976, 1952, 3904, 7808, 15616, 31232, 62464, 124928, 249856],
     "High": [10000, 25000, 50000, 100000, 180000, 240000] # not recommended due to higher risk of hitting max bet limit, but included for variety
 }
 
@@ -267,14 +294,34 @@ async def run_farm(ctx):
     
     while farming_active:
         try:
+            if data.get("timer_end") and time.time() >= data["timer_end"]:
+                if seq_idx == 0:
+                    farming_active = False
+                    data["timer_end"] = None
+                    save_data(data)
+                    await ctx.send("⏳ **Timer ended!** Farm stopped safely after a win.")
+                    print(f"{Fore.YELLOW}[TIMER] Farm stopped naturally.{Style.RESET_ALL}")
+                    return
+                else:
+                    print(f"{Fore.YELLOW}[TIMER] Time is up, but currently in a losing streak. Playing until next win to stop.{Style.RESET_ALL}")
+            cfg = load_config()
+            seq_name = cfg.get("BET_SEQUENCE", "Low")
+            sol_limit = data.get("stop_on_loss_limit")
+            if not sol_limit:
+                sol_limit = 499224 if seq_name == "Low" else 605000
+                
+            if data.get("internal_profit", 0) < 0 and abs(data["internal_profit"]) >= sol_limit:
+                farming_active = False
+                await ctx.send(f"🛑 **Stop-on-Loss Triggered!** Net loss reached **__{abs(data['internal_profit']):,}__**. Farm stopped.")
+                print(f"{Fore.RED}[STOP ON LOSS] Farm stopped due to max loss limit.{Style.RESET_ALL}")
+                return
+
             if await check_warning(ctx):
                 farming_active = False
                 print(f"{Fore.RED}[FARM] Stopped: CAPTCHA WARNING.{Style.RESET_ALL}")
                 await ctx.send("⚠️ **__WARNING DETECTED!__** 🛑 Stopping | **SOLVE YOUR CAPTCHA FIRST** | Type `.start` again to restart.")
                 return
 
-            cfg = load_config()
-            seq_name = cfg.get("BET_SEQUENCE", "Low")
             sequence = BET_SEQUENCES.get(seq_name, BET_SEQUENCES["Low"])
             
             if seq_idx >= len(sequence):
@@ -331,7 +378,6 @@ async def run_farm(ctx):
                     await ctx.send("⚠️ **__CAPTCHA WARNING!__** Stopped. Solve & restart.")
                     return
                 
-
                 try:
                     await asyncio.sleep(2)
                     history = await ctx.channel.history(limit=10).flatten()
@@ -349,10 +395,10 @@ async def run_farm(ctx):
                     footer = msg.embeds[0].footer.text or ""
                 footer_lower = footer.lower().strip()
                 
-                
                 if "game in progress" not in footer_lower:
                     if "won" in footer_lower and "lost" not in footer_lower:
                         data["wins"] += 1
+                        data["internal_profit"] = data.get("internal_profit", 0) + bet
                         seq_idx = 0
                         print(f"{Fore.GREEN}[WIN] +{bet:,} → reset to idx 0{Style.RESET_ALL}")
                         data["seq_index"] = seq_idx
@@ -366,6 +412,7 @@ async def run_farm(ctx):
                         break
                     elif "lost" in footer_lower or ("bust" in footer_lower and "both" not in footer_lower):
                         data["losses"] += 1
+                        data["internal_profit"] = data.get("internal_profit", 0) - bet
                         seq_idx += 1
                         print(f"{Fore.RED}[LOSS] -{bet:,} → next idx {seq_idx}{Style.RESET_ALL}")
                         data["seq_index"] = seq_idx
@@ -375,7 +422,6 @@ async def run_farm(ctx):
                         await asyncio.sleep(2)
                         continue
                 
-
                 action = decide(full_text)
 
                 emoji = "👊" if action == "hit" else "🛑"
@@ -383,6 +429,7 @@ async def run_farm(ctx):
                 if last_reaction and last_reaction == emoji:
                     try:
                         await msg.remove_reaction(emoji, ghosty.user)
+                        last_reaction = None  
                     except Exception as e:
                         print(f"{Fore.RED}[remove reaction error] {e}{Style.RESET_ALL}")
                 elif last_reaction and last_reaction != emoji:
@@ -426,6 +473,7 @@ async def start(ctx):
     data["ties"] = 0
     data["commands_used"] = 0
     data["seq_index"] = 0
+    data["internal_profit"] = 0
     save_data(data)
     
     print(f"{Fore.GREEN}[START] Balance saved: {balance:,}{Style.RESET_ALL}")
@@ -435,12 +483,45 @@ async def start(ctx):
 
 @ghosty.command()
 async def stop(ctx):
-    global farming_active
+    global farming_active, data
     if not farming_active:
         return await ctx.send("⏹ GhoSty OwO BlackJack Worker is not running.")
     farming_active = False
-    await ctx.send("🛑 **__Stopped__** successfully.")
+    data["timer_end"] = None
+    save_data(data)
+    await ctx.send("🛑 **__Stopped__** successfully. Timer also cleared if active.")
     print(f"{Fore.YELLOW}[STOP] User halted farm.{Style.RESET_ALL}")
+
+@ghosty.command()
+async def timer(ctx, *, time_input=None):
+    global data
+    if not time_input:
+        return await ctx.send("⚙️ Usage: `.timer 1h 30m 20s`, `.timer 45m`, etc.")
+    
+    seconds = parse_time_to_seconds(time_input)
+    if seconds < 300:
+        return await ctx.send("❌ Error: Minimum timer duration allowed is 5 minutes.")
+        
+    data["timer_end"] = time.time() + seconds
+    save_data(data)
+    await ctx.send(f"✅ Timer set for **{time_input}**. Farm will naturally stop after this time (and after winning the active sequence streak).")
+
+@ghosty.command()
+async def stoponloss(ctx, amount_str=None):
+    global data
+    if not amount_str:
+        return await ctx.send("⚙️ Usage: `.stoponloss 100k`, `.stoponloss 1m`, `.stoponloss 500k`")
+        
+    try:
+        limit = parse_amount(amount_str)
+        if limit < 100000:
+            return await ctx.send("❌ Error: Minimum stop on loss amount allowed is 100k.")
+            
+        data["stop_on_loss_limit"] = limit
+        save_data(data)
+        await ctx.send(f"✅ Stop on Loss limit set successfully to **__{limit:,}__** cowoncy.")
+    except Exception:
+        await ctx.send("❌ Invalid format! Please use formats like `500k`, `1m`, `100k`, etc.")
 
 @ghosty.command(aliases=["h"])
 async def help(ctx):
@@ -453,6 +534,8 @@ Prefix: `.`
  🛑 Stop: *Stops The AutoBot*
  🔍 Status: *Shows Bot Status*
  ⚡ Bets: *Change bet sequence (Low/High)*
+ ⏳ Timer: *Set duration to auto-stop (.timer 45m)*
+ 📉 StopOnLoss: *Set max loss limit (.stoponloss 1m)*
 
 **__Features__**
  ⚠ Ban Bypass
@@ -464,8 +547,7 @@ Prefix: `.`
  🧠 Smart Dynamic
  🎯 Integrated Data with Advanced Decisions
 
-**__Made with 💖 and 🧠 by GhoSty | [Async Development]__** 
-"""
+**__Made with 💖 and 🧠 by GhoSty | [Async Development]__** """
     await ctx.send(ghosty_help)  
 
 @ghosty.command()
@@ -493,7 +575,6 @@ async def status(ctx):
     else:
         print(f"{Fore.YELLOW}[STATUS] Could not fetch balance, using saved value{Style.RESET_ALL}")
         
-        
     profit = data["current_balance"] - data["starting_balance"]
     profit_str = f"+{profit:,}" if profit >= 0 else f"{profit:,}"
     status_icon = "🟢" if profit >= 0 else "🔴"
@@ -504,7 +585,6 @@ async def status(ctx):
     elapsed = datetime.now() - start_dt
     h, rem = divmod(int(elapsed.total_seconds()), 3600)
     m, s = divmod(rem, 60)
-    
     
     cfg = load_config()
     text = (
@@ -540,7 +620,7 @@ if __name__ == "__main__":
                                           ░░░█████████░░░   ░░███░░░
                                           
                
-                                                 Async Development Stable Build Version: 060426.1.0.0{Style.RESET_ALL}"""
+                                                 Async Development Stable Build Version: 120426.2.0.0{Style.RESET_ALL}"""
     ) 
     print(f"{Fore.LIGHTRED_EX}\n\n > Made By GhoSty [Async Development]{Style.RESET_ALL}")
     ghosty.run(config["TOKEN"], bot=False)
