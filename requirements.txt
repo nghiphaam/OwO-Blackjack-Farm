@@ -1,2 +1,4 @@
 discord.py==1.7.3
 colorama
+legacy-cgi; python_version >= "3.13"
+audioop-lts; python_version >= "3.13"
