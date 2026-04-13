@@ -67,7 +67,7 @@ def parse_amount(amt_str):
         return int(amt_str)
 
 DEFAULT_TIMING_RANGES = {
-    "pre_round": (1.1, 2.6),
+    "pre_round": (2.8, 4.2),
     "embed_poll": (0.9, 1.6),
     "balance_poll": (1.0, 1.7),
     "warning_retry": (0.7, 1.2),
