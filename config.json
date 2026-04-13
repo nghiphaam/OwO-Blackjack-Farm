@@ -1,6 +1,5 @@
 {
   "TOKEN": "Add your token here between the double quotes. Delete this text first",
   "BET_SEQUENCE": "Low",
-  "REACT_STALL_TIMEOUT_SECONDS": 8,
   "DYNAMIC_TIMING": true
 }
